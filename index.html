@@ -48,8 +48,10 @@
   <h1>Cast Player</h1>
   <div class="right">
     <span id="devName" class="hint"></span>
-    <google-cast-launcher id="launcher"></google-cast-launcher>
-    <button id="unsupported" class="castbtn" title="Open in Chrome or Edge to cast">Cast: use Chrome</button>
+    <button id="castBtn" class="castbtn on" title="Cast to a nearby device">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><line x1="2" y1="20" x2="2.01" y2="20"/></svg>
+      Cast
+    </button>
   </div>
 </header>
 
@@ -130,22 +132,40 @@ let ctx=null,rp=null,rc=null;
 const casting=()=>ctx&&ctx.getCastState()==='CONNECTED'&&ctx.getCurrentSession();
 
 window['__onGCastApiAvailable']=function(ok){
-  if(!ok){$('unsupported').classList.add('on');return}
-  ctx=cast.framework.CastContext.getInstance();
-  ctx.setOptions({receiverApplicationId:chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,autoJoinPolicy:chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED});
-  $('launcher').style.display='inline-block';
-  rp=new cast.framework.RemotePlayer();
-  rc=new cast.framework.RemotePlayerController(rp);
-  ctx.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED,onSession);
-  rc.addEventListener(cast.framework.RemotePlayerEventType.ANY_CHANGE,syncUi);
+  if(!ok)return;
+  try{
+    ctx=cast.framework.CastContext.getInstance();
+    ctx.setOptions({receiverApplicationId:chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,autoJoinPolicy:chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED});
+    rp=new cast.framework.RemotePlayer();
+    rc=new cast.framework.RemotePlayerController(rp);
+    ctx.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED,onSession);
+    rc.addEventListener(cast.framework.RemotePlayerEventType.ANY_CHANGE,syncUi);
+  }catch(e){ctx=null}
 };
-if(!/Chrome|Edg|CriOS/.test(navigator.userAgent)||/OPR|Firefox/.test(navigator.userAgent)){
-  document.addEventListener('DOMContentLoaded',()=>$('unsupported').classList.add('on'));
-}
 const sdk=document.createElement('script');
 sdk.src='https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loaded=false&framework=1';
-sdk.onerror=()=>$('unsupported').classList.add('on');
 document.head.appendChild(sdk);
+
+$('castBtn').onclick=async()=>{
+  if(casting()){toast('Already casting. Use Stop casting to disconnect.');return}
+  // Local file: use the browser's own cast (Remote Playback) which streams the element to the TV
+  if(src&&src.local&&v.remote){
+    try{await v.remote.prompt();return}
+    catch(e){
+      if(e&&e.name==='NotAllowedError')return; // user closed the picker
+      toast('For local files: Chrome menu ⋮ → Cast, save and share → Cast… → pick your device, then go fullscreen.');
+      return;
+    }
+  }
+  if(ctx){
+    try{
+      const err=await ctx.requestSession();
+      if(err&&err!=='cancel')toast('No cast devices found. Check the TV is on the same Wi-Fi.');
+    }catch(e){toast('No cast devices found. Check the TV is on the same Wi-Fi.')}
+    return;
+  }
+  toast('Cast needs Chrome or Edge on https. Open this page there.');
+};
 
 function onSession(e){
   const S=cast.framework.SessionState;
