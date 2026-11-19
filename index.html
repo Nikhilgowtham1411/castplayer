@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0f">
+<title>Cast Player</title>
+<style>
+  :root{--bg:#0b0b0f;--panel:#15151c;--line:#25252f;--text:#f2f2f6;--mute:#8b8b99;--acc:#6ea8ff}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center}
+  header{width:100%;max-width:960px;display:flex;align-items:center;justify-content:space-between;padding:18px 20px}
+  h1{font-size:18px;font-weight:600;letter-spacing:.2px}
+  .right{display:flex;align-items:center;gap:10px}
+  google-cast-launcher{display:none;width:28px;height:28px;--connected-color:var(--acc);--disconnected-color:#fff;cursor:pointer}
+  .castbtn{display:none;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 14px;color:var(--text);font-size:13px;align-items:center;gap:8px}
+  .castbtn.on{display:flex}
+  main{width:100%;max-width:960px;padding:0 20px 28px;flex:1;display:flex;flex-direction:column;gap:16px}
+  .stage{position:relative;background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9;border:1px solid var(--line)}
+  video,audio{width:100%;height:100%;display:block;background:#000}
+  .drop{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px;background:var(--panel)}
+  .drop.hide{display:none}
+  .drop p{color:var(--mute);font-size:14px}
+  button.primary{background:var(--acc);color:#07101f;border:0;border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;cursor:pointer}
+  .cast-ui{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:linear-gradient(160deg,#10131d,#0b0b0f);padding:20px;text-align:center}
+  .cast-ui.show{display:flex}
+  .cast-ui .dev{color:var(--acc);font-size:13px;letter-spacing:.4px;text-transform:uppercase}
+  .cast-ui .name{font-size:18px;font-weight:600;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ctrls{display:flex;align-items:center;gap:18px}
+  .ib{background:var(--panel);border:1px solid var(--line);color:var(--text);width:52px;height:52px;border-radius:50%;font-size:20px;cursor:pointer}
+  .ib.big{width:64px;height:64px;font-size:24px;background:var(--acc);color:#07101f;border:0}
+  .seek{width:min(520px,90%);display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mute)}
+  input[type=range]{flex:1;accent-color:var(--acc)}
+  .bar{display:flex;gap:10px;flex-wrap:wrap}
+  .bar button{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:11px 16px;font-size:14px;cursor:pointer}
+  .url{flex:1;min-width:220px;display:flex;gap:8px}
+  .url input{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:11px 14px;font-size:14px;outline:none}
+  .url input:focus{border-color:var(--acc)}
+  .title{font-size:15px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#22222c;border:1px solid var(--line);padding:11px 16px;border-radius:12px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%)}
+  .hint{color:var(--mute);font-size:12px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cast Player</h1>
+  <div class="right">
+    <span id="devName" class="hint"></span>
+    <google-cast-launcher id="launcher"></google-cast-launcher>
+    <button id="unsupported" class="castbtn" title="Open in Chrome or Edge to cast">Cast: use Chrome</button>
+  </div>
+</header>
+
+<main>
+  <div class="stage" id="stage">
+    <video id="v" controls playsinline></video>
+    <div class="drop" id="drop">
+      <button class="primary" id="pick">Select media</button>
+      <p>or drag &amp; drop a video / audio file here</p>
+    </div>
+    <div class="cast-ui" id="castUi">
+      <div class="dev" id="castDev">Casting</div>
+      <div class="name" id="castName"></div>
+      <div class="ctrls">
+        <button class="ib" id="back">−10</button>
+        <button class="ib big" id="pp">⏸</button>
+        <button class="ib" id="fwd">+10</button>
+      </div>
+      <div class="seek"><span id="cur">0:00</span><input type="range" id="sk" min="0" max="100" value="0" step="0.1"><span id="dur">0:00</span></div>
+      <button class="ib" id="stopCast" style="width:auto;height:auto;border-radius:12px;padding:10px 18px;font-size:14px">Stop casting</button>
+    </div>
+  </div>
+
+  <div class="title" id="title"></div>
+
+  <div class="bar">
+    <button id="pick2">Select media</button>
+    <div class="url">
+      <input id="urlIn" type="url" placeholder="Paste video URL (mp4, webm, m3u8…)">
+      <button id="load">Play</button>
+    </div>
+  </div>
+  <p class="hint" id="hint">Tap the cast icon to find nearby devices on the same Wi-Fi. Local files play on this device; casting needs a media URL the TV can reach.</p>
+</main>
+
+<input type="file" id="file" accept="video/*,audio/*" hidden>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const v=$('v'),drop=$('drop'),castUi=$('castUi');
+let src=null; // {url,name,local,type}
+let toastT;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3500)}
+const fmt=s=>{if(!isFinite(s))return'0:00';s=Math.floor(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
+
+function guessType(name,fallback){
+  if(fallback)return fallback;
+  const e=(name.split('?')[0].split('.').pop()||'').toLowerCase();
+  return({mp4:'video/mp4',m4v:'video/mp4',webm:'video/webm',mkv:'video/x-matroska',mov:'video/mp4',m3u8:'application/x-mpegURL',mp3:'audio/mpeg',m4a:'audio/mp4',aac:'audio/aac',wav:'audio/wav',ogg:'audio/ogg',flac:'audio/flac'})[e]||'video/mp4';
+}
+
+function setSource(s){
+  if(src&&src.local)URL.revokeObjectURL(src.url);
+  src=s;
+  v.src=s.url;
+  drop.classList.add('hide');
+  $('title').textContent=s.name;
+  $('castName').textContent=s.name;
+  v.play().catch(()=>{});
+  if(casting()){
+    if(s.local)toast('Local file plays here. To cast, paste a media URL.');
+    else loadRemote();
+  }
+}
+
+// file picking
+$('pick').onclick=$('pick2').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(f)openFile(f);e.target.value=''};
+function openFile(f){setSource({url:URL.createObjectURL(f),name:f.name,local:true,type:f.type||guessType(f.name)})}
+['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'&&e.dataTransfer.files[0])openFile(e.dataTransfer.files[0])}));
+$('load').onclick=()=>{const u=$('urlIn').value.trim();if(!u)return;setSource({url:u,name:decodeURIComponent(u.split('?')[0].split('/').pop())||u,local:false,type:guessType(u)})};
+$('urlIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('load').click()});
+v.addEventListener('error',()=>{if(src)toast("Can't play this file in the browser (unsupported format).")});
+
+// ---------- Google Cast ----------
+let ctx=null,rp=null,rc=null;
+const casting=()=>ctx&&ctx.getCastState()==='CONNECTED'&&ctx.getCurrentSession();
+
+window['__onGCastApiAvailable']=function(ok){
+  if(!ok){$('unsupported').classList.add('on');return}
+  ctx=cast.framework.CastContext.getInstance();
+  ctx.setOptions({receiverApplicationId:chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,autoJoinPolicy:chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED});
+  $('launcher').style.display='inline-block';
+  rp=new cast.framework.RemotePlayer();
+  rc=new cast.framework.RemotePlayerController(rp);
+  ctx.addEventListener(cast.framework.CastContextEventType.SESSION_STATE_CHANGED,onSession);
+  rc.addEventListener(cast.framework.RemotePlayerEventType.ANY_CHANGE,syncUi);
+};
+if(!/Chrome|Edg|CriOS/.test(navigator.userAgent)||/OPR|Firefox/.test(navigator.userAgent)){
+  document.addEventListener('DOMContentLoaded',()=>$('unsupported').classList.add('on'));
+}
+const sdk=document.createElement('script');
+sdk.src='https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loaded=false&framework=1';
+sdk.onerror=()=>$('unsupported').classList.add('on');
+document.head.appendChild(sdk);
+
+function onSession(e){
+  const S=cast.framework.SessionState;
+  if(e.sessionState===S.SESSION_STARTED||e.sessionState===S.SESSION_RESUMED){
+    const name=ctx.getCurrentSession().getCastDevice().friendlyName;
+    $('devName').textContent=name;$('castDev').textContent='Casting to '+name;
+    castUi.classList.add('show');
+    if(src){
+      if(src.local){toast('Connected. Local files can\'t be streamed to the TV — paste a media URL to cast.');}
+      else{v.pause();loadRemote()}
+    }
+  }else if(e.sessionState===S.SESSION_ENDED){
+    $('devName').textContent='';castUi.classList.remove('show');
+  }
+}
+function loadRemote(){
+  const s=casting();if(!s||!src||src.local)return;
+  v.pause();
+  const mi=new chrome.cast.media.MediaInfo(src.url,src.type);
+  mi.metadata=new chrome.cast.media.GenericMediaMetadata();mi.metadata.title=src.name;
+  const req=new chrome.cast.media.LoadRequest(mi);
+  req.currentTime=v.currentTime||0;req.autoplay=true;
+  s.loadMedia(req).catch(err=>toast('Cast failed: '+(err&&err.description||err)));
+}
+function syncUi(){
+  if(!rp)return;
+  $('pp').textContent=rp.isPaused?'▶':'⏸';
+  $('sk').max=rp.duration||100;
+  if(!seeking)$('sk').value=rp.currentTime||0;
+  $('cur').textContent=fmt(rp.currentTime);$('dur').textContent=fmt(rp.duration);
+}
+let seeking=false;
+$('pp').onclick=()=>rc&&rc.playOrPause();
+$('back').onclick=()=>{if(rp){rp.currentTime=Math.max(0,rp.currentTime-10);rc.seek()}};
+$('fwd').onclick=()=>{if(rp){rp.currentTime=Math.min(rp.duration,rp.currentTime+10);rc.seek()}};
+$('sk').oninput=()=>{seeking=true;$('cur').textContent=fmt($('sk').value)};
+$('sk').onchange=()=>{rp.currentTime=+$('sk').value;rc.seek();seeking=false};
+$('stopCast').onclick=()=>{ctx&&ctx.endCurrentSession(true)};
+</script>
+</body>
+</html>
