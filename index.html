@@ -184,19 +184,22 @@ v.addEventListener('error',()=>{if(src)toast("Can't play this file in the browse
 
 // ---------- laptop library (served by serve.py) ----------
 (async()=>{
-  try{
-    const r=await fetch('/__list');if(!r.ok)return;
-    const d=await r.json();if(!d.files)return;
-    const mk=f=>({url:'/media/'+f.rel.split('/').map(encodeURIComponent).join('/'),
-      castUrl:'http://'+d.lan+':'+d.port+'/media/'+f.rel.split('/').map(encodeURIComponent).join('/'),
-      name:f.name,local:false,type:guessType(f.name)});
-    $('lib').hidden=false;
-    $('libInfo').textContent='Laptop library · '+d.files.length+' files';
-    const L=$('libList');
-    d.files.forEach(f=>{const e=document.createElement('div');e.textContent=f.rel;e.onclick=()=>addItems([mk(f)]);L.appendChild(e)});
-    $('addAll').onclick=()=>addItems(d.files.map(mk));
-    $('hint').textContent='Tap a video in Laptop library to add it. Tap Cast to send to your TV (same Wi-Fi).';
-  }catch(e){}
+  const bases=location.hostname==='localhost'||location.hostname==='127.0.0.1'?['']:['http://localhost:8000','http://127.0.0.1:8000'];
+  for(const base of bases.length?bases:['']){
+    try{
+      const r=await fetch(base+'/__list');if(!r.ok)continue;
+      const d=await r.json();if(!d.files)continue;
+      const enc=f=>f.rel.split('/').map(encodeURIComponent).join('/');
+      const mk=f=>({url:base+'/media/'+enc(f),castUrl:'http://'+d.lan+':'+d.port+'/media/'+enc(f),name:f.name,local:false,type:guessType(f.name)});
+      $('lib').hidden=false;
+      $('libInfo').textContent='Laptop library · '+d.files.length+' files';
+      const L=$('libList');
+      d.files.forEach(f=>{const e=document.createElement('div');e.textContent=f.rel;e.onclick=()=>addItems([mk(f)]);L.appendChild(e)});
+      $('addAll').onclick=()=>addItems(d.files.map(mk));
+      $('hint').textContent='Tap a video in Laptop library to add it. Tap Cast to send to your TV (same Wi-Fi).';
+      return;
+    }catch(e){}
+  }
 })();
 
 // ---------- Google Cast ----------
