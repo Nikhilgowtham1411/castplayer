@@ -41,6 +41,12 @@
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#22222c;border:1px solid var(--line);padding:11px 16px;border-radius:12px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center}
   .toast.show{opacity:1;transform:translateX(-50%)}
   .hint{color:var(--mute);font-size:12px;line-height:1.5}
+  .lib{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .lib .h{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--mute)}
+  .lib .h button{background:var(--acc);color:#07101f;border:0;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .lib .l{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+  .lib .l div{padding:8px 10px;border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lib .l div:hover{background:#1d1d27}
   .pl{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
   .it{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;cursor:pointer}
   .it.on{border-color:var(--acc)}
@@ -91,6 +97,10 @@
       <input id="urlIn" type="url" placeholder="Paste video URL (mp4, webm, m3u8…)">
       <button id="load">Play</button>
     </div>
+  </div>
+  <div class="lib" id="lib" hidden>
+    <div class="h"><span id="libInfo">Laptop library</span><button id="addAll">Add all</button></div>
+    <div class="l" id="libList"></div>
   </div>
   <div class="pl" id="pl"></div>
   <p class="hint" id="hint">Tap the cast icon to find nearby devices on the same Wi-Fi. Local files play on this device; casting needs a media URL the TV can reach.</p>
@@ -172,6 +182,23 @@ $('load').onclick=()=>{const u=$('urlIn').value.trim();if(!u)return;addItems([{u
 $('urlIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('load').click()});
 v.addEventListener('error',()=>{if(src)toast("Can't play this file in the browser (unsupported format).")});
 
+// ---------- laptop library (served by serve.py) ----------
+(async()=>{
+  try{
+    const r=await fetch('/__list');if(!r.ok)return;
+    const d=await r.json();if(!d.files)return;
+    const mk=f=>({url:'/media/'+f.rel.split('/').map(encodeURIComponent).join('/'),
+      castUrl:'http://'+d.lan+':'+d.port+'/media/'+f.rel.split('/').map(encodeURIComponent).join('/'),
+      name:f.name,local:false,type:guessType(f.name)});
+    $('lib').hidden=false;
+    $('libInfo').textContent='Laptop library · '+d.files.length+' files';
+    const L=$('libList');
+    d.files.forEach(f=>{const e=document.createElement('div');e.textContent=f.rel;e.onclick=()=>addItems([mk(f)]);L.appendChild(e)});
+    $('addAll').onclick=()=>addItems(d.files.map(mk));
+    $('hint').textContent='Tap a video in Laptop library to add it. Tap Cast to send to your TV (same Wi-Fi).';
+  }catch(e){}
+})();
+
 // ---------- Google Cast ----------
 let ctx=null,rp=null,rc=null;
 const casting=()=>ctx&&ctx.getCastState()==='CONNECTED'&&ctx.getCurrentSession();
@@ -219,7 +246,7 @@ function onSession(e){
     $('devName').textContent=name;$('castDev').textContent='Casting to '+name;
     castUi.classList.add('show');
     if(src){
-      if(src.local){toast('Connected. Local files can\'t be streamed to the TV — paste a media URL to cast.');}
+      if(src.local){toast('Connected. Pick videos from Laptop library to cast (run serve.py).');}
       else{v.pause();loadRemote()}
     }
   }else if(e.sessionState===S.SESSION_ENDED){
@@ -229,7 +256,7 @@ function onSession(e){
 function loadRemote(){
   const s=casting();if(!s||!src||src.local)return;
   v.pause();
-  const mi=new chrome.cast.media.MediaInfo(src.url,src.type);
+  const mi=new chrome.cast.media.MediaInfo(src.castUrl||src.url,src.type);
   mi.metadata=new chrome.cast.media.GenericMediaMetadata();mi.metadata.title=src.name;
   const req=new chrome.cast.media.LoadRequest(mi);
   req.currentTime=v.currentTime||0;req.autoplay=true;
